@@ -3,20 +3,17 @@ package WebService::Hatena::Exist;
 use strict;
 use warnings;
 use base qw( Class::ErrorHandler );
-use LWP::UserAgent;
+use URI::Fetch::SimpleCache;
 use XML::Simple;
 use Readonly;
 
 Readonly our $HATENA_URL => q[http://d.hatena.ne.jp/exist?mode=xml&url=];
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 our $TARGET_URL;
 
 sub new {
     my($class,$self)=(shift,{@_});
-
-    $self->{'ua'} ||= LWP::UserAgent->new;
-
     bless($self,$class);
 
     $self->target_url( $self->{'url'} ) if $self->{'url'};
@@ -31,15 +28,15 @@ sub target_url {
 }
 
 sub bookmark {
-    shift->{'bookmark'};
+    shift->{'parse_ref'}->{'count'}->{'bookmark'}->{'content'};
 }
 
 sub antenna {
-    shift->{'antenna'};
+    shift->{'parse_ref'}->{'count'}->{'antenna'}->{'content'};
 }
 
 sub diary {
-    shift->{'diary'};
+    shift->{'parse_ref'}->{'count'}->{'diary'}->{'content'};
 }
 
 sub parse_ref {
@@ -54,24 +51,19 @@ sub get_feed {
     my $self = shift;
 
     my $get_url = $HATENA_URL.$self->target_url;
-    my $req = HTTP::Request->new('GET',$get_url);
 
-    if ( $self->{'ua'}->request($req)->is_success ) {
-        $self->{'feed'}  = $self->{'ua'}->request($req)->content;
-        $self->{'parse_ref'} = $self->parse_feed;
-        $self->{'bookmark'}
-         = $self->{'parse_ref'}->{'count'}->{'bookmark'}->{'content'};
-        $self->{'antenna'}
-         = $self->{'parse_ref'}->{'count'}->{'antenna'}->{'content'};
-        $self->{'diary'}
-         = $self->{'parse_ref'}->{'count'}->{'diary'}->{'content'};
+    my $res = URI::Fetch::SimpleCache->fetch(
+        $get_url,
+        Cache                 => $self->{'Cache'},
+        Cache_root            => $self->{'Cache_root'},
+        Cache_default_expires => $self->{'Cache_default_expires'},
+        UserAgent             => $self->{'ua'},
+    ) or return $self->error( URI::Fetch::SimpleCache->errstr );
 
-        return $self->{'feed'};
-    }
-    else {
-        $self->error( $self->{'ua'}->request($req)->status_line );
-        return undef;
-    }
+    $self->{'feed'}      = $res->content;
+    $self->{'parse_ref'} = $self->parse_feed;
+
+    $self->{'feed'};
 }
 
 sub parse_feed {
@@ -87,7 +79,7 @@ WebService::Hatena::Exist - Interface to the HATENA exist API
 
 =head1 VERSION
 
-This documentation refers to WebService::Hatena::Exist version 0.01
+This documentation refers to WebService::Hatena::Exist version 0.02
 
 =head1 SYNOPSIS
 
@@ -102,7 +94,7 @@ This documentation refers to WebService::Hatena::Exist version 0.01
     );
     
     if ( ! $h->get_feed ) {
-        print $whe->errstr;
+        print $h->errstr;
         exit;
     }
     
@@ -132,17 +124,20 @@ To use HATENA exist API easily, this is made.
 =head1 METHOD
 
 =head2 new
-
-    my $ua = LWP::UserAgent->new;
     
     my $h = WebService::Hatena::Exist->new(
-        url => 'http://www.hatena.ne.jp/',
-        ua  => $ua,
+        url   => 'http://www.hatena.ne.jp/',
+        ua                    => $ua,  # LWP's object
+        Cache                 => $ca,  # Cache::Cache's object
+        Cache_root            => '',
+        Cache_default_expires => '',
     );
 
 Creates and returns new WebService::Hatena::Exist object.
 If you have already had LWP::UserAgent's object,
 LWP::UserAgent's object can be used by WebService::Hatena::Exist. 
+If you have already had Cache::Cache's object,
+Cache::Cache's object can be used by WebService::Hatena::Exist. 
 
 =over 4
 
@@ -154,6 +149,9 @@ LWP::UserAgent's object can be used by WebService::Hatena::Exist.
 
 url ,It's that wants to investigate. 
 ua is LWP::UserAgent's object.
+Cache is Cache::Cache's object.
+Cache_root is Cache::Cache's local cache path.
+Cache_default_expires is cache time.
 
 =back
 
@@ -240,12 +238,7 @@ This method use XML::Simple.
 
 =head1 DEPENDENCIES
 
-=item * L<strict>
-=item * L<warnings>
-=item * L<Class::ErrorHandler>
-=item * L<LWP::UserAgent>
-=item * L<XML::Simple>
-=item * L<Readonly>
+L<strict>,L<warnings>,L<Class::ErrorHandler>,L<URI::Fetch::SimpleCache>,L<XML::Simple>,L<Readonly>
 
 =head1 SEE ALSO
 
@@ -269,7 +262,7 @@ Atsushi Kobayashi, E<lt>nekokak@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2005 by Atsushi Kobayashi (E<lt>nekokak@cpan.orgEE<gt>). All rights reserved.
+Copyright (C) 2005 by Atsushi Kobayashi (E<lt>nekokak@cpan.orgE<gt>). All rights reserved.
 
 This library is free software; you can redistribute it and/or modify it
  under the same terms as Perl itself. See L<perlartistic>.

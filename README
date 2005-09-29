@@ -20,7 +20,7 @@ This module requires these other modules and libraries:
  - strict
  - warnings
  - Class::ErrorHandler
- - LWP::UserAgent
+ - URI::Fetch::SimpleCache
  - XML::Simple
  - Readonly
 
